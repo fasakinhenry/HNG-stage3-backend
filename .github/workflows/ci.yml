@@ -1,12 +1,20 @@
-name: CI
+name: Backend CI/CD
 
 on:
+  push:
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-build:
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
