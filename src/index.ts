@@ -11,24 +11,11 @@ import profileRoutes from './routes/profiles.routes';
 import userRoutes from './routes/users.routes';
 
 const app = express();
-const allowedOrigins = new Set([
-  config.web.origin,
-  'http://localhost:5173',
-  'http://localhost:3001',
-]);
-
 // ─── Security & Parsing ───────────────────────────────────────────────────────
 app.use(helmet());
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.has(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(null, false);
-    },
+    origin: true,
     credentials: true,
     exposedHeaders: ['X-API-Version'],
   })
