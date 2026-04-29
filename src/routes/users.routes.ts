@@ -6,6 +6,7 @@ import {
   updateUserStatus,
 } from '../controllers/users.controller';
 import { authenticate, requireRole, requireApiVersion } from '../middleware/auth';
+import { requireCsrf } from '../middleware/csrf';
 import { apiRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
@@ -18,7 +19,7 @@ router.use(apiRateLimiter);
 
 router.get('/', listUsers);
 router.get('/:id', getUserById);
-router.patch('/:id/role', updateUserRole);
-router.patch('/:id/status', updateUserStatus);
+router.patch('/:id/role', requireCsrf, updateUserRole);
+router.patch('/:id/status', requireCsrf, updateUserStatus);
 
 export default router;

@@ -16,8 +16,8 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: [config.web.origin, 'http://localhost:5173', 'http://localhost:3001'],
-    credentials: true,
+    origin: '*',
+    credentials: false,
     exposedHeaders: ['X-API-Version'],
   })
 );
@@ -34,6 +34,11 @@ app.get('/health', (_req, res) => {
 });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api/profiles', profileRoutes);
+app.use('/api/users', userRoutes);
+
+// Legacy v1 routes for backwards compatibility
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/profiles', profileRoutes);
 app.use('/api/v1/users', userRoutes);

@@ -8,6 +8,7 @@ import {
   cliTokenExchange,
 } from '../controllers/auth.controller';
 import { authenticate } from '../middleware/auth';
+import { issueCsrfToken, requireCsrf } from '../middleware/csrf';
 import { authRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
@@ -18,13 +19,14 @@ router.use(authRateLimiter);
 // OAuth flow
 router.get('/github', githubLogin);
 router.get('/github/callback', githubCallback);
+router.get('/csrf', issueCsrfToken);
 
 // CLI-specific: code exchange (PKCE)
 router.post('/cli/exchange', cliTokenExchange);
 
 // Token management
-router.post('/refresh', refreshTokens);
-router.post('/logout', logout);
+router.post('/refresh', requireCsrf, refreshTokens);
+router.post('/logout', requireCsrf, logout);
 
 // Authenticated user info
 router.get('/me', authenticate, getMe);

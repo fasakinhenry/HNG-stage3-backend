@@ -15,6 +15,7 @@ import {
   isRefreshTokenValid,
 } from '../utils/jwt';
 import { sendError } from '../utils/response';
+import { csrfCookieName, generateCsrfToken } from '../utils/csrf';
 
 // ─── In-memory PKCE store ─────────────────────────────────────────────────────
 // Maps state → { codeVerifier, cliCallbackUrl }
@@ -180,6 +181,13 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
       maxAge: 5 * 60 * 1000, // 5 min
       path: '/api/v1/auth/refresh',
     });
+    res.cookie(csrfCookieName(), generateCsrfToken(), {
+      httpOnly: false,
+      secure: config.web.cookieSecure,
+      sameSite: 'lax',
+      domain: config.web.cookieDomain,
+      maxAge: 60 * 60 * 1000,
+    });
 
     res.redirect(`${config.web.origin}/dashboard`);
   } catch (err) {
@@ -295,6 +303,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
   res.clearCookie('access_token');
   res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' });
+  res.clearCookie(csrfCookieName());
   res.json({ status: 'success', message: 'Logged out successfully' });
 }
 

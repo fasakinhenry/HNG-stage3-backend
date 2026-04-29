@@ -8,6 +8,7 @@ import {
   exportProfiles,
 } from '../controllers/profiles.controller';
 import { authenticate, requireRole, requireApiVersion } from '../middleware/auth';
+import { requireCsrf } from '../middleware/csrf';
 import { apiRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
@@ -24,7 +25,7 @@ router.get('/search', searchProfiles);
 router.get('/:id', getProfileById);
 
 // Admin only
-router.post('/', requireRole('admin'), createProfile);
-router.delete('/:id', requireRole('admin'), deleteProfile);
+router.post('/', requireCsrf, requireRole('admin'), createProfile);
+router.delete('/:id', requireCsrf, requireRole('admin'), deleteProfile);
 
 export default router;
