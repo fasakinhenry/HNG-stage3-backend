@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { config } from '../config/env';
 import { User } from '../models/User';
@@ -22,10 +23,27 @@ import { csrfCookieName, generateCsrfToken } from '../utils/csrf';
 // Short-lived; for production use Redis with a 10-minute TTL.
 interface PkceEntry {
   codeVerifier: string;
+  codeChallenge: string;
   cliCallbackUrl?: string;
   createdAt: number;
 }
 const pkceStore = new Map<string, PkceEntry>();
+
+function base64UrlEncode(buffer: Buffer): string {
+  return buffer
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+function createPkcePair(): { codeVerifier: string; codeChallenge: string } {
+  const codeVerifier = base64UrlEncode(crypto.randomBytes(32));
+  const codeChallenge = base64UrlEncode(
+    crypto.createHash('sha256').update(codeVerifier).digest()
+  );
+  return { codeVerifier, codeChallenge };
+}
 
 // Prune stale entries every minute (entries older than 10 minutes)
 setInterval(() => {
@@ -87,29 +105,26 @@ async function issueTokens(user: InstanceType<typeof User>) {
 // ─── GET /api/v1/auth/github ──────────────────────────────────────────────────
 // Redirects to GitHub OAuth. Stores PKCE params in memory keyed by state.
 export async function githubLogin(req: Request, res: Response): Promise<void> {
-  const state = (req.query.state as string) || crypto.randomUUID();
-  const codeVerifier = req.query.code_verifier as string | undefined;
-  const codeChallenge = req.query.code_challenge as string | undefined;
-  const codeChallengeMethod = (req.query.code_challenge_method as string) || 'S256';
+  const state = crypto.randomUUID();
+  const { codeVerifier, codeChallenge } = createPkcePair();
   const cliCallbackUrl = req.query.cli_callback as string | undefined;
 
   // Store PKCE entry — keyed by state so callback can retrieve it
-  if (codeVerifier) {
-    pkceStore.set(state, { codeVerifier, cliCallbackUrl, createdAt: Date.now() });
-  }
+  pkceStore.set(state, {
+    codeVerifier,
+    codeChallenge,
+    cliCallbackUrl,
+    createdAt: Date.now(),
+  });
 
   const params = new URLSearchParams({
     client_id: config.github.clientId,
     redirect_uri: config.github.callbackUrl,
     scope: 'read:user user:email',
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
-
-  // GitHub supports PKCE for OAuth Apps (optional but included for completeness)
-  if (codeChallenge) {
-    params.append('code_challenge', codeChallenge);
-    params.append('code_challenge_method', codeChallengeMethod);
-  }
 
   res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
 }
@@ -125,22 +140,31 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
     return;
   }
 
+  if (!state) {
+    sendError(res, 'Missing OAuth state', 400);
+    return;
+  }
+
   try {
     // Pull PKCE entry from store (and remove it — single use)
-    let codeVerifier: string | undefined;
-    let cliCallbackUrl: string | undefined;
-
-    if (state) {
-      const entry = pkceStore.get(state);
-      if (entry) {
-        codeVerifier = entry.codeVerifier;
-        cliCallbackUrl = entry.cliCallbackUrl;
-        pkceStore.delete(state); // consumed
-      }
+    const entry = pkceStore.get(state);
+    if (!entry) {
+      sendError(res, 'Invalid or expired OAuth state', 400);
+      return;
     }
 
+    const { codeVerifier, cliCallbackUrl } = entry;
+    pkceStore.delete(state); // consumed
+
     // Exchange auth code → GitHub access token
-    const githubToken = await exchangeCodeForToken(code, codeVerifier);
+    let githubToken;
+    try {
+      githubToken = await exchangeCodeForToken(code, codeVerifier);
+    } catch (error) {
+      console.error('GitHub token exchange failed:', error);
+      sendError(res, 'Invalid OAuth code or verifier', 400);
+      return;
+    }
     const githubUser = await getGitHubUser(githubToken.access_token);
     const email = githubUser.email || (await getGitHubUserEmail(githubToken.access_token));
 
@@ -179,7 +203,7 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
       sameSite: 'lax',
       domain: config.web.cookieDomain,
       maxAge: 5 * 60 * 1000, // 5 min
-      path: '/api/v1/auth/refresh',
+      path: '/api/auth/refresh',
     });
     res.cookie(csrfCookieName(), generateCsrfToken(), {
       httpOnly: false,
@@ -281,7 +305,7 @@ export async function refreshTokens(req: Request, res: Response): Promise<void> 
         sameSite: 'lax',
         domain: config.web.cookieDomain,
         maxAge: 5 * 60 * 1000,
-        path: '/api/v1/auth/refresh',
+        path: '/api/auth/refresh',
       });
     }
 
@@ -302,7 +326,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
   if (token) await revokeRefreshToken(token);
 
   res.clearCookie('access_token');
-  res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' });
+  res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
   res.clearCookie(csrfCookieName());
   res.json({ status: 'success', message: 'Logged out successfully' });
 }

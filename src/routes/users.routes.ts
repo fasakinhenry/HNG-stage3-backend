@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   listUsers,
+  getCurrentUser,
   getUserById,
   updateUserRole,
   updateUserStatus,
@@ -11,7 +12,10 @@ import { apiRateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
-// All user management routes: authenticated + admin only
+// Self-service user info
+router.get('/me', authenticate, requireApiVersion, apiRateLimiter, getCurrentUser);
+
+// All other user management routes: authenticated + admin only
 router.use(authenticate);
 router.use(requireApiVersion);
 router.use(requireRole('admin'));

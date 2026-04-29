@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listUsers = listUsers;
+exports.getCurrentUser = getCurrentUser;
 exports.getUserById = getUserById;
 exports.updateUserRole = updateUserRole;
 exports.updateUserStatus = updateUserStatus;
@@ -31,6 +32,22 @@ async function listUsers(req, res) {
     }
     catch {
         (0, response_1.sendError)(res, 'Failed to retrieve users', 500);
+    }
+}
+/**
+ * GET /api/v1/users/me  [authenticated user]
+ */
+async function getCurrentUser(req, res) {
+    try {
+        const user = await User_1.User.findById(req.user?.sub).lean();
+        if (!user) {
+            (0, response_1.sendError)(res, 'User not found', 404);
+            return;
+        }
+        res.json({ status: 'success', data: { ...user, id: user._id, _id: undefined } });
+    }
+    catch {
+        (0, response_1.sendError)(res, 'Failed to retrieve user', 500);
     }
 }
 /**

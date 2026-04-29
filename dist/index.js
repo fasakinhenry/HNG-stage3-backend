@@ -15,11 +15,22 @@ const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const profiles_routes_1 = __importDefault(require("./routes/profiles.routes"));
 const users_routes_1 = __importDefault(require("./routes/users.routes"));
 const app = (0, express_1.default)();
+const allowedOrigins = new Set([
+    env_1.config.web.origin,
+    'http://localhost:5173',
+    'http://localhost:3001',
+]);
 // ─── Security & Parsing ───────────────────────────────────────────────────────
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
-    origin: '*',
-    credentials: false,
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.has(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(null, false);
+    },
+    credentials: true,
     exposedHeaders: ['X-API-Version'],
 }));
 app.use(express_1.default.json());

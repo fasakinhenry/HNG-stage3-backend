@@ -33,6 +33,19 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
 }
 
 /**
+ * GET /api/v1/users/me  [authenticated user]
+ */
+export async function getCurrentUser(req: Request, res: Response): Promise<void> {
+  try {
+    const user = await User.findById(req.user?.sub).lean() as any;
+    if (!user) { sendError(res, 'User not found', 404); return; }
+    res.json({ status: 'success', data: { ...user, id: user._id, _id: undefined } });
+  } catch {
+    sendError(res, 'Failed to retrieve user', 500);
+  }
+}
+
+/**
  * GET /api/v1/users/:id  [admin only]
  */
 export async function getUserById(req: Request, res: Response): Promise<void> {

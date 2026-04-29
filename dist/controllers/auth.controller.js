@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.githubLogin = githubLogin;
 exports.githubCallback = githubCallback;
@@ -6,6 +9,7 @@ exports.cliTokenExchange = cliTokenExchange;
 exports.refreshTokens = refreshTokens;
 exports.logout = logout;
 exports.getMe = getMe;
+const crypto_1 = __importDefault(require("crypto"));
 const env_1 = require("../config/env");
 const User_1 = require("../models/User");
 const github_1 = require("../services/github");
@@ -13,6 +17,18 @@ const jwt_1 = require("../utils/jwt");
 const response_1 = require("../utils/response");
 const csrf_1 = require("../utils/csrf");
 const pkceStore = new Map();
+function base64UrlEncode(buffer) {
+    return buffer
+        .toString('base64')
+        .replace(/=/g, '')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_');
+}
+function createPkcePair() {
+    const codeVerifier = base64UrlEncode(crypto_1.default.randomBytes(32));
+    const codeChallenge = base64UrlEncode(crypto_1.default.createHash('sha256').update(codeVerifier).digest());
+    return { codeVerifier, codeChallenge };
+}
 // Prune stale entries every minute (entries older than 10 minutes)
 setInterval(() => {
     const cutoff = Date.now() - 10 * 60 * 1000;
@@ -71,26 +87,24 @@ async function issueTokens(user) {
 // ─── GET /api/v1/auth/github ──────────────────────────────────────────────────
 // Redirects to GitHub OAuth. Stores PKCE params in memory keyed by state.
 async function githubLogin(req, res) {
-    const state = req.query.state || crypto.randomUUID();
-    const codeVerifier = req.query.code_verifier;
-    const codeChallenge = req.query.code_challenge;
-    const codeChallengeMethod = req.query.code_challenge_method || 'S256';
+    const state = crypto_1.default.randomUUID();
+    const { codeVerifier, codeChallenge } = createPkcePair();
     const cliCallbackUrl = req.query.cli_callback;
     // Store PKCE entry — keyed by state so callback can retrieve it
-    if (codeVerifier) {
-        pkceStore.set(state, { codeVerifier, cliCallbackUrl, createdAt: Date.now() });
-    }
+    pkceStore.set(state, {
+        codeVerifier,
+        codeChallenge,
+        cliCallbackUrl,
+        createdAt: Date.now(),
+    });
     const params = new URLSearchParams({
         client_id: env_1.config.github.clientId,
         redirect_uri: env_1.config.github.callbackUrl,
         scope: 'read:user user:email',
         state,
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
     });
-    // GitHub supports PKCE for OAuth Apps (optional but included for completeness)
-    if (codeChallenge) {
-        params.append('code_challenge', codeChallenge);
-        params.append('code_challenge_method', codeChallengeMethod);
-    }
     res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
 }
 // ─── GET /api/v1/auth/github/callback ────────────────────────────────────────
@@ -102,20 +116,29 @@ async function githubCallback(req, res) {
         (0, response_1.sendError)(res, 'Missing OAuth code', 400);
         return;
     }
+    if (!state) {
+        (0, response_1.sendError)(res, 'Missing OAuth state', 400);
+        return;
+    }
     try {
         // Pull PKCE entry from store (and remove it — single use)
-        let codeVerifier;
-        let cliCallbackUrl;
-        if (state) {
-            const entry = pkceStore.get(state);
-            if (entry) {
-                codeVerifier = entry.codeVerifier;
-                cliCallbackUrl = entry.cliCallbackUrl;
-                pkceStore.delete(state); // consumed
-            }
+        const entry = pkceStore.get(state);
+        if (!entry) {
+            (0, response_1.sendError)(res, 'Invalid or expired OAuth state', 400);
+            return;
         }
+        const { codeVerifier, cliCallbackUrl } = entry;
+        pkceStore.delete(state); // consumed
         // Exchange auth code → GitHub access token
-        const githubToken = await (0, github_1.exchangeCodeForToken)(code, codeVerifier);
+        let githubToken;
+        try {
+            githubToken = await (0, github_1.exchangeCodeForToken)(code, codeVerifier);
+        }
+        catch (error) {
+            console.error('GitHub token exchange failed:', error);
+            (0, response_1.sendError)(res, 'Invalid OAuth code or verifier', 400);
+            return;
+        }
         const githubUser = await (0, github_1.getGitHubUser)(githubToken.access_token);
         const email = githubUser.email || (await (0, github_1.getGitHubUserEmail)(githubToken.access_token));
         const user = await upsertGitHubUser(githubUser.id, githubUser.login, email, githubUser.avatar_url);
@@ -149,7 +172,7 @@ async function githubCallback(req, res) {
             sameSite: 'lax',
             domain: env_1.config.web.cookieDomain,
             maxAge: 5 * 60 * 1000, // 5 min
-            path: '/api/v1/auth/refresh',
+            path: '/api/auth/refresh',
         });
         res.cookie((0, csrf_1.csrfCookieName)(), (0, csrf_1.generateCsrfToken)(), {
             httpOnly: false,
@@ -251,7 +274,7 @@ async function refreshTokens(req, res) {
                 sameSite: 'lax',
                 domain: env_1.config.web.cookieDomain,
                 maxAge: 5 * 60 * 1000,
-                path: '/api/v1/auth/refresh',
+                path: '/api/auth/refresh',
             });
         }
         res.json({
@@ -271,7 +294,7 @@ async function logout(req, res) {
     if (token)
         await (0, jwt_1.revokeRefreshToken)(token);
     res.clearCookie('access_token');
-    res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' });
+    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
     res.clearCookie((0, csrf_1.csrfCookieName)());
     res.json({ status: 'success', message: 'Logged out successfully' });
 }

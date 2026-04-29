@@ -12,7 +12,7 @@ exports.config = {
     github: {
         clientId: process.env.GITHUB_CLIENT_ID || '',
         clientSecret: process.env.GITHUB_CLIENT_SECRET || '',
-        callbackUrl: process.env.GITHUB_OAUTH_CALLBACK_URL || 'http://localhost:3000/api/v1/auth/github/callback',
+        callbackUrl: process.env.GITHUB_OAUTH_CALLBACK_URL || 'http://localhost:3000/api/auth/github/callback',
     },
     jwt: {
         accessSecret: process.env.JWT_ACCESS_SECRET || 'dev-access-secret-change-in-prod',
