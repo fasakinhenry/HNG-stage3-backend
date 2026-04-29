@@ -3,7 +3,6 @@ import { verifyAccessToken, TokenPayload } from '../utils/jwt';
 import { User } from '../models/User';
 import { sendError } from '../utils/response';
 
-// Extend Express Request
 declare global {
   namespace Express {
     interface Request {
@@ -13,7 +12,8 @@ declare global {
 }
 
 /**
- * authenticate — verifies the Bearer access token and attaches user to req.user
+ * authenticate — verifies the Bearer access token (or access_token cookie for web)
+ * and attaches decoded payload to req.user.
  */
 export async function authenticate(
   req: Request,
@@ -24,7 +24,6 @@ export async function authenticate(
     const authHeader = req.headers.authorization;
     let token: string | undefined;
 
-    // Support both Bearer header and cookie (web portal)
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.slice(7);
     } else if (req.cookies?.access_token) {
@@ -49,8 +48,8 @@ export async function authenticate(
       return;
     }
 
-    // Check user is still active
-    const user = await User.findOne({ id: payload.sub });
+    // Verify user still exists and is active — _id is the UUID (sub)
+    const user = await User.findById(payload.sub);
     if (!user) {
       sendError(res, 'User not found', 401);
       return;
@@ -60,22 +59,15 @@ export async function authenticate(
       return;
     }
 
-    req.user = {
-      sub: payload.sub,
-      username: payload.username,
-      role: payload.role,
-      type: 'access',
-      is_active: user.is_active,
-    };
-
+    req.user = { ...payload, is_active: user.is_active };
     next();
-  } catch (err) {
+  } catch {
     sendError(res, 'Authentication error', 500);
   }
 }
 
 /**
- * requireRole — RBAC guard factory
+ * requireRole — RBAC guard. Call after authenticate.
  */
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -92,7 +84,7 @@ export function requireRole(...roles: string[]) {
 }
 
 /**
- * requireApiVersion — enforces X-API-Version header on /api/* routes
+ * requireApiVersion — all /api/v1/* profile & user routes need X-API-Version: 1
  */
 export function requireApiVersion(
   req: Request,
