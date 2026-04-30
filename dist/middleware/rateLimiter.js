@@ -13,11 +13,12 @@ const rateLimitResponse = (_req, res) => {
     });
 };
 exports.authRateLimiter = (0, express_rate_limit_1.default)({
-    windowMs: env_1.config.rateLimit.windowMs,
-    max: env_1.config.rateLimit.authMax,
+    windowMs: 60 * 1000, // 1 minute window
+    max: 10, // 10 requests per minute
     handler: rateLimitResponse,
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req) => req.path === '/health',
 });
 exports.apiRateLimiter = (0, express_rate_limit_1.default)({
     windowMs: env_1.config.rateLimit.windowMs,

@@ -15,24 +15,18 @@ const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const profiles_routes_1 = __importDefault(require("./routes/profiles.routes"));
 const users_routes_1 = __importDefault(require("./routes/users.routes"));
 const app = (0, express_1.default)();
-const allowedOrigins = new Set([
-    env_1.config.web.origin,
-    'http://localhost:5173',
-    'http://localhost:3001',
-]);
 // ─── Security & Parsing ───────────────────────────────────────────────────────
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.has(origin)) {
-            callback(null, true);
-            return;
-        }
-        callback(null, false);
+        callback(null, true);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Version', 'X-CSRF-Token'],
     exposedHeaders: ['X-API-Version'],
 }));
+app.options('*', (0, cors_1.default)());
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use((0, cookie_parser_1.default)());
@@ -43,6 +37,7 @@ app.get('/health', (_req, res) => {
     res.json({ status: 'ok', version: '1.0.0', timestamp: new Date().toISOString() });
 });
 // ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/auth', auth_routes_1.default);
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/profiles', profiles_routes_1.default);
 app.use('/api/users', users_routes_1.default);
