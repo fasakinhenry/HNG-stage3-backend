@@ -102,7 +102,7 @@ async function issueTokens(user: InstanceType<typeof User>) {
   return { accessToken, refreshToken };
 }
 
-// ─── GET /api/v1/auth/github ──────────────────────────────────────────────────
+// ─── GET /auth/github ────────────────────────────────────────────────────────
 // Redirects to GitHub OAuth. Stores PKCE params in memory keyed by state.
 export async function githubLogin(req: Request, res: Response): Promise<void> {
   const state = crypto.randomUUID();
@@ -129,7 +129,7 @@ export async function githubLogin(req: Request, res: Response): Promise<void> {
   res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`);
 }
 
-// ─── GET /api/v1/auth/github/callback ────────────────────────────────────────
+// ─── GET /auth/github/callback ────────────────────────────────────────────────
 // GitHub redirects here after user authorises.
 // Also supports test_code for grader integration: code=test_code + valid state/verifier
 export async function githubCallback(req: Request, res: Response): Promise<void> {
@@ -244,7 +244,7 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
       sameSite: 'lax',
       domain: config.web.cookieDomain,
       maxAge: 5 * 60 * 1000, // 5 min
-      path: '/api/auth/refresh',
+      path: '/auth/refresh',
     });
     res.cookie(csrfCookieName(), generateCsrfToken(), {
       httpOnly: false,
@@ -261,7 +261,7 @@ export async function githubCallback(req: Request, res: Response): Promise<void>
   }
 }
 
-// ─── POST /api/v1/auth/cli/exchange ──────────────────────────────────────────
+// ─── POST /auth/cli/exchange ─────────────────────────────────────────────────
 // CLI-only: accepts the raw code + code_verifier, handles the GitHub exchange
 // server-side, and returns tokens as JSON. Used as the fallback flow when the
 // backend cannot redirect to localhost (e.g. strict firewall).
@@ -298,7 +298,7 @@ export async function cliTokenExchange(req: Request, res: Response): Promise<voi
   }
 }
 
-// ─── POST /api/v1/auth/refresh ────────────────────────────────────────────────
+// ─── POST /auth/refresh ──────────────────────────────────────────────────────
 // Single-use refresh: old token is revoked immediately, new pair is issued.
 export async function refreshTokens(req: Request, res: Response): Promise<void> {
   const token: string | undefined = req.body?.refresh_token || req.cookies?.refresh_token;
@@ -346,7 +346,7 @@ export async function refreshTokens(req: Request, res: Response): Promise<void> 
         sameSite: 'lax',
         domain: config.web.cookieDomain,
         maxAge: 5 * 60 * 1000,
-        path: '/api/auth/refresh',
+        path: '/auth/refresh',
       });
     }
 
@@ -361,13 +361,13 @@ export async function refreshTokens(req: Request, res: Response): Promise<void> 
   }
 }
 
-// ─── POST /api/v1/auth/logout ─────────────────────────────────────────────────
+// ─── POST /auth/logout ───────────────────────────────────────────────────────
 export async function logout(req: Request, res: Response): Promise<void> {
   const token: string | undefined = req.body?.refresh_token || req.cookies?.refresh_token;
   if (token) await revokeRefreshToken(token);
 
   res.clearCookie('access_token');
-  res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
+  res.clearCookie('refresh_token', { path: '/auth/refresh' });
   res.clearCookie(csrfCookieName());
   res.json({ status: 'success', message: 'Logged out successfully' });
 }
