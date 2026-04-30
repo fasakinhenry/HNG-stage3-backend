@@ -105,6 +105,12 @@ async function issueTokens(user: InstanceType<typeof User>) {
 // ─── GET /auth/github ────────────────────────────────────────────────────────
 // Redirects to GitHub OAuth. Stores PKCE params in memory keyed by state.
 export async function githubLogin(req: Request, res: Response): Promise<void> {
+  // Explicit GET check
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    sendError(res, 'GET method required', 405);
+    return;
+  }
   const state = crypto.randomUUID();
   const { codeVerifier, codeChallenge } = createPkcePair();
   const cliCallbackUrl = req.query.cli_callback as string | undefined;
@@ -301,6 +307,12 @@ export async function cliTokenExchange(req: Request, res: Response): Promise<voi
 // ─── POST /auth/refresh ──────────────────────────────────────────────────────
 // Single-use refresh: old token is revoked immediately, new pair is issued.
 export async function refreshTokens(req: Request, res: Response): Promise<void> {
+  // Explicit POST check
+  if (req.method !== 'POST') {
+    sendError(res, 'POST method required', 405);
+    return;
+  }
+  
   const token: string | undefined = req.body?.refresh_token || req.cookies?.refresh_token;
 
   if (!token) { sendError(res, 'Refresh token required', 400); return; }
@@ -363,6 +375,12 @@ export async function refreshTokens(req: Request, res: Response): Promise<void> 
 
 // ─── POST /auth/logout ───────────────────────────────────────────────────────
 export async function logout(req: Request, res: Response): Promise<void> {
+  // Explicit POST check
+  if (req.method !== 'POST') {
+    sendError(res, 'POST method required', 405);
+    return;
+  }
+  
   const token: string | undefined = req.body?.refresh_token || req.cookies?.refresh_token;
   if (token) await revokeRefreshToken(token);
 

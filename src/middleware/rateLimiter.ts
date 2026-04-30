@@ -10,11 +10,12 @@ const rateLimitResponse = (_req: Request, res: Response) => {
 };
 
 export const authRateLimiter = rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.authMax,
+  windowMs: 60 * 1000, // 1 minute window
+  max: 10, // 10 requests per minute
   handler: rateLimitResponse,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/health',
 });
 
 export const apiRateLimiter = rateLimit({
