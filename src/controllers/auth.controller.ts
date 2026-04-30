@@ -111,8 +111,14 @@ export async function githubLogin(req: Request, res: Response): Promise<void> {
     sendError(res, 'GET method required', 405);
     return;
   }
-  const state = crypto.randomUUID();
-  const { codeVerifier, codeChallenge } = createPkcePair();
+
+  const incomingState = req.query.state as string | undefined;
+  const incomingCodeVerifier = req.query.code_verifier as string | undefined;
+  const incomingCodeChallenge = req.query.code_challenge as string | undefined;
+  const state = incomingState || crypto.randomUUID();
+  const pkcePair = createPkcePair();
+  const codeVerifier = incomingCodeVerifier || pkcePair.codeVerifier;
+  const codeChallenge = incomingCodeChallenge || pkcePair.codeChallenge;
   const cliCallbackUrl = req.query.cli_callback as string | undefined;
 
   // Store PKCE entry — keyed by state so callback can retrieve it
